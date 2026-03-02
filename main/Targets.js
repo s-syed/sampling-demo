@@ -129,8 +129,8 @@ MCMC.targets['fab-gmm40'] = (function() {
 MCMC.targetNames.push('donut-timbit');
 MCMC.targets['donut-timbit'] = (function() {
   var R = 2.5, sigma2Ring = 0.20;
-  var sigmaTimbit = 0.20;
-  var logWRing = Math.log(0.60), logWTimbit = Math.log(0.40);
+  var sigmaTimbit = 0.08;
+  var logWRing = Math.log(0.50), logWTimbit = Math.log(0.50);
 
   function logRing(x) {
     var r = Math.sqrt(x[0]*x[0] + x[1]*x[1]);

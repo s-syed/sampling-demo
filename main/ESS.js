@@ -90,7 +90,24 @@
     ctx.fillText(line2, x + padding, y + padding + fontSize + lineGap);
   }
 
-  // ── Patch viz.drawHistograms ──────────────────────────────────────────────
+  // ── Patch viz.drawSample — bigger, darker dots ───────────────────────────
+  function installSamplePatch() {
+    if (typeof viz === 'undefined') { setTimeout(installSamplePatch, 200); return; }
+    viz.drawSample = function(canvas, center) {
+      var context = canvas.getContext('2d');
+      context.globalCompositeOperation = 'multiply';
+      // radius scales with world-coordinate window so dots stay visible
+      var worldRadius = (viz.xmax - viz.xmin) * 0.006;
+      this.drawCircle(canvas, {
+        fill: 'rgb(80, 80, 80)',
+        center: center,
+        radius: worldRadius,
+        lw: 0,
+      });
+      context.globalCompositeOperation = 'source-over';
+    };
+    console.log('[ESS.js] drawSample patched.');
+  }
 
   function installPatch() {
     if (typeof viz === 'undefined' || typeof sim === 'undefined') {
@@ -143,8 +160,12 @@
   // Wait for window.onload to finish (viz and sim are created there)
   if (document.readyState === 'complete') {
     setTimeout(installPatch, 300);
+    setTimeout(installSamplePatch, 300);
   } else {
-    window.addEventListener('load', function () { setTimeout(installPatch, 300); });
+    window.addEventListener('load', function () {
+      setTimeout(installPatch, 300);
+      setTimeout(installSamplePatch, 300);
+    });
   }
 
 })();

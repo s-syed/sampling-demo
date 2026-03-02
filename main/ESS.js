@@ -56,22 +56,26 @@
     var ctx = canvas.getContext('2d');
     var w = canvas.width, h = canvas.height;
 
-    var label = 'ESS: ' + ess + ' / ' + n;
+    var pct = Math.round(ess / n * 100);
+    var line1 = 'ESS: ' + ess + ' / ' + n;
+    var line2 = 'Rel. ESS: ' + pct + '%';
 
-    var fontSize = Math.max(10, Math.min(14, Math.floor(h * 0.13)));
+    var fontSize = Math.max(13, Math.min(20, Math.floor(h * 0.08)));
     ctx.font = 'bold ' + fontSize + 'px sans-serif';
     ctx.textBaseline = 'top';
 
-    var padding = 4;
-    var tw = ctx.measureText(label).width;
+    var padding = 6;
+    var tw = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width);
+    var boxH = (fontSize + padding) * 2 + padding;
 
-    // background pill
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fillRect(padding, padding, tw + padding * 2, fontSize + padding * 2);
+    // background
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillRect(padding, padding, tw + padding * 2, boxH);
 
     // text
     ctx.fillStyle = '#1a4a6e';
-    ctx.fillText(label, padding * 2, padding * 1.5);
+    ctx.fillText(line1, padding * 2, padding * 2);
+    ctx.fillText(line2, padding * 2, padding * 2 + fontSize + padding);
   }
 
   // ── Patch viz.drawHistograms ──────────────────────────────────────────────

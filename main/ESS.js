@@ -97,9 +97,9 @@
       var context = canvas.getContext('2d');
       context.globalCompositeOperation = 'multiply';
       // radius scales with world-coordinate window so dots stay visible
-      var worldRadius = (viz.xmax - viz.xmin) * 0.006;
+      var worldRadius = (viz.xmax - viz.xmin) * 0.0018;
       this.drawCircle(canvas, {
-        fill: 'rgb(80, 80, 80)',
+        fill: 'rgb(180, 180, 180)',
         center: center,
         radius: worldRadius,
         lw: 0,

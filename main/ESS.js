@@ -51,7 +51,7 @@
 
   // ── Draw ESS label on a histogram canvas ─────────────────────────────────
 
-  function drawESSLabel(canvas, ess, n) {
+  function drawESSLabel(canvas, ess, n, position) {
     if (!canvas) return;
     var ctx = canvas.getContext('2d');
     var w = canvas.width, h = canvas.height;
@@ -60,22 +60,34 @@
     var line1 = 'ESS: ' + ess + ' / ' + n;
     var line2 = 'Rel. ESS: ' + pct + '%';
 
-    var fontSize = Math.max(13, Math.min(20, Math.floor(h * 0.08)));
+    var fontSize = Math.max(18, Math.min(28, Math.floor(h * 0.12)));
     ctx.font = 'bold ' + fontSize + 'px sans-serif';
     ctx.textBaseline = 'top';
 
-    var padding = 6;
+    var padding = 8;
+    var lineGap = 6;
     var tw = Math.max(ctx.measureText(line1).width, ctx.measureText(line2).width);
-    var boxH = (fontSize + padding) * 2 + padding;
+    var boxW = tw + padding * 2;
+    var boxH = fontSize * 2 + lineGap + padding * 2;
+
+    var x, y;
+    if (position === 'bottom-right') {
+      x = w - boxW - padding;
+      y = h - boxH - padding;
+    } else {
+      // top-left, offset down to avoid title overlap
+      x = padding;
+      y = padding + 28;
+    }
 
     // background
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillRect(padding, padding, tw + padding * 2, boxH);
+    ctx.fillStyle = 'rgba(255,255,255,0.90)';
+    ctx.fillRect(x, y, boxW, boxH);
 
     // text
     ctx.fillStyle = '#1a4a6e';
-    ctx.fillText(line1, padding * 2, padding * 2);
-    ctx.fillText(line2, padding * 2, padding * 2 + fontSize + padding);
+    ctx.fillText(line1, x + padding, y + padding);
+    ctx.fillText(line2, x + padding, y + padding + fontSize + lineGap);
   }
 
   // ── Patch viz.drawHistograms ──────────────────────────────────────────────
@@ -121,8 +133,8 @@
       var essX = computeESS(xs);
       var essY = computeESS(ys);
 
-      drawESSLabel(viz.xHistCanvas, essX, xs.length);
-      drawESSLabel(viz.yHistCanvas, essY, ys.length);
+      drawESSLabel(viz.xHistCanvas, essX, xs.length, 'bottom-right');
+      drawESSLabel(viz.yHistCanvas, essY, ys.length, 'top-left');
     };
 
     console.log('[ESS.js] drawHistograms patched.');

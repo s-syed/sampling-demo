@@ -32,10 +32,46 @@ function logMVNdiag2(x0, x1, mu0, mu1, s0, s1) {
   if (idx !== -1) MCMC.targetNames.splice(idx, 1);
 })();
 
-// ─── 1. Multimodal Gaussian — unequal weights ────────────────────────────────
+// ─── 1a. Multimodal Gaussian — overlapping (wider modes) ─────────────────────
 
-MCMC.targetNames.push('multimodal-unequal');
-MCMC.targets['multimodal-unequal'] = (function() {
+MCMC.targetNames.push('multimodal');
+MCMC.targets['multimodal'] = (function() {
+  var comps = [
+    { mu: [-4.0,  0.0], s: [1.2, 1.2], w: 0.50 },
+    { mu: [ 4.0,  0.0], s: [0.9, 0.9], w: 0.30 },
+    { mu: [ 0.0,  3.5], s: [1.0, 1.0], w: 0.15 },
+    { mu: [ 0.0, -3.5], s: [0.7, 0.7], w: 0.05 },
+  ];
+  var logW = comps.map(function(c) { return Math.log(c.w); });
+  return {
+    xmin: -8, xmax: 8,
+    logDensity: function(x) {
+      var terms = comps.map(function(c, k) {
+        return logW[k] + logMVNdiag2(x[0], x[1], c.mu[0], c.mu[1], c.s[0], c.s[1]);
+      });
+      return logSumExpArr(terms);
+    },
+    gradLogDensity: function(x) {
+      var logTerms = comps.map(function(c, k) {
+        return logW[k] + logMVNdiag2(x[0], x[1], c.mu[0], c.mu[1], c.s[0], c.s[1]);
+      });
+      var lse = logSumExpArr(logTerms);
+      var gx = 0, gy = 0;
+      for (var k = 0; k < comps.length; k++) {
+        var r = Math.exp(logTerms[k] - lse);
+        var c = comps[k];
+        gx += r * (-(x[0] - c.mu[0]) / (c.s[0]*c.s[0]));
+        gy += r * (-(x[1] - c.mu[1]) / (c.s[1]*c.s[1]));
+      }
+      return matrix([[gx],[gy]]);
+    }
+  };
+}());
+
+// ─── 1b. Multimodal Gaussian — well-separated (sharp modes) ──────────────────
+
+MCMC.targetNames.push('multimodal-well-separated');
+MCMC.targets['multimodal-well-separated'] = (function() {
   var comps = [
     { mu: [-4.0,  0.0], s: [0.2, 0.2], w: 0.50 },
     { mu: [ 4.0,  0.0], s: [0.15, 0.15], w: 0.30 },

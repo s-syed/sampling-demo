@@ -6,7 +6,7 @@
  *   gradLogDensity(x)    — returns matrix([[gx],[gy]])
  *   xmin, xmax           — viewing window (ymin/ymax derived symmetrically)
  *
- * Each target must also be pushed to MCMC.targetNames for the dropdown.
+ * Each new target must also be pushed to MCMC.targetNames for the dropdown.
  */
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -25,54 +25,26 @@ function logMVNdiag2(x0, x1, mu0, mu1, s0, s1) {
   return -0.5 * (d0*d0/(s0*s0) + d1*d1/(s1*s1)) - Math.log(2*Math.PI*s0*s1);
 }
 
-// ─── 1. Multimodal Gaussian — 4 modes, equal weights ─────────────────────────
+// ─── Remove original 'multimodal' from dropdown ───────────────────────────────
+// (It was registered in MCMC.js; splice it out before Simulation.js builds the UI)
+(function() {
+  var idx = MCMC.targetNames.indexOf('multimodal');
+  if (idx !== -1) MCMC.targetNames.splice(idx, 1);
+})();
 
-MCMC.targetNames.push('multimodal-gaussian');
-MCMC.targets['multimodal-gaussian'] = (function() {
-  var K = 4, spread = 3.0, sigma = 0.5;
-  var modes = [];
-  for (var k = 0; k < K; k++) {
-    var angle = 2 * Math.PI * k / K;
-    modes.push([spread * Math.cos(angle), spread * Math.sin(angle)]);
-  }
-  var logWk = Math.log(1/K);
-  return {
-    xmin: -6, xmax: 6,
-    logDensity: function(x) {
-      var terms = [];
-      for (var k = 0; k < K; k++)
-        terms.push(logWk + logMVNdiag2(x[0], x[1], modes[k][0], modes[k][1], sigma, sigma));
-      return logSumExpArr(terms);
-    },
-    gradLogDensity: function(x) {
-      var logTerms = [];
-      for (var k = 0; k < K; k++)
-        logTerms.push(logWk + logMVNdiag2(x[0], x[1], modes[k][0], modes[k][1], sigma, sigma));
-      var lse = logSumExpArr(logTerms);
-      var gx = 0, gy = 0;
-      for (var k = 0; k < K; k++) {
-        var r = Math.exp(logTerms[k] - lse);
-        gx += r * (-(x[0] - modes[k][0]) / (sigma*sigma));
-        gy += r * (-(x[1] - modes[k][1]) / (sigma*sigma));
-      }
-      return matrix([[gx],[gy]]);
-    }
-  };
-}());
-
-// ─── 2. Multimodal Gaussian — unequal weights ────────────────────────────────
+// ─── 1. Multimodal Gaussian — unequal weights ────────────────────────────────
 
 MCMC.targetNames.push('multimodal-unequal');
 MCMC.targets['multimodal-unequal'] = (function() {
   var comps = [
-    { mu: [-4.0,  0.0], s: [0.6, 0.6], w: 0.5  },
-    { mu: [ 4.0,  0.0], s: [0.4, 0.4], w: 0.3  },
-    { mu: [ 0.0,  4.0], s: [0.5, 0.5], w: 0.15 },
-    { mu: [ 0.0, -4.0], s: [0.3, 0.3], w: 0.05 },
+    { mu: [-4.0,  0.0], s: [1.0, 1.0], w: 0.50 },
+    { mu: [ 4.0,  0.0], s: [0.7, 0.7], w: 0.30 },
+    { mu: [ 0.0,  3.5], s: [0.8, 0.8], w: 0.15 },
+    { mu: [ 0.0, -3.5], s: [0.5, 0.5], w: 0.05 },
   ];
   var logW = comps.map(function(c) { return Math.log(c.w); });
   return {
-    xmin: -6, xmax: 6,
+    xmin: -8, xmax: 8,
     logDensity: function(x) {
       var terms = comps.map(function(c, k) {
         return logW[k] + logMVNdiag2(x[0], x[1], c.mu[0], c.mu[1], c.s[0], c.s[1]);
@@ -96,63 +68,106 @@ MCMC.targets['multimodal-unequal'] = (function() {
   };
 }());
 
-// ─── 3. GMM-32 (Blessing et al. arXiv:2208.01893) ────────────────────────────
+// ─── 2. FAB GMM-40 (Midgley et al. / lollcat fab-torch, seed 0) ──────────────
+// 40 components, diagonal covariance, equal weights, scattered irregularly.
+// Means ~ N(0, 6^2), scales ~ exp(Uniform[-0.5, 0.5]).
 
-MCMC.targetNames.push('gmm32');
-MCMC.targets['gmm32'] = (function() {
-  var modes = [];
-  var rows = 4, cols = 8, spacing = 3.0, sigma = 0.3;
-  for (var r = 0; r < rows; r++)
-    for (var c = 0; c < cols; c++)
-      modes.push([(c - (cols-1)/2)*spacing, (r - (rows-1)/2)*spacing]);
-  var logWk = Math.log(1/modes.length);
+MCMC.targetNames.push('fab-gmm40');
+MCMC.targets['fab-gmm40'] = (function() {
+  var locs = [
+    [10.584, 2.401], [5.872, 13.445], [11.205, -5.864], [5.701, -0.908],
+    [-0.619, 2.464], [0.864, 8.726],  [4.566, 0.730],  [2.663, 2.002],
+    [8.964, -1.231], [1.878, -5.125], [-15.318, 3.922], [5.187, -4.453],
+    [13.619, -8.726],[0.275, -1.123], [9.197, 8.816],  [0.930, 2.269],
+    [-5.327,-11.885],[-2.087, 0.938], [7.382, 7.214],  [-2.324,-1.814],
+    [-6.291, -8.520],[-10.238,11.705],[-3.058,-2.628], [-7.517, 4.665],
+    [-9.683, -1.276],[-5.373, 2.321], [-3.065,-7.084], [-0.169, 2.570],
+    [0.399, 1.815],  [-3.806,-2.176], [-4.035,-2.157], [-4.879,-10.358],
+    [1.065, -2.411], [-9.781, 2.777], [-5.444, 0.312], [4.375, 0.774],
+    [6.836, -7.409], [2.414, -4.109], [-5.225,-3.473], [-1.869, 0.337]
+  ];
+  var scales = [
+    [1.389,0.609],[1.195,0.795],[1.265,1.588],[0.778,1.079],[1.096,1.075],
+    [0.758,1.573],[0.948,1.414],[1.221,0.817],[1.369,0.902],[1.464,1.085],
+    [1.465,1.212],[1.253,1.001],[1.578,1.155],[0.927,1.112],[0.618,0.820],
+    [1.174,0.811],[1.125,0.931],[0.695,0.817],[1.072,1.095],[1.077,1.166],
+    [1.164,0.934],[1.487,0.876],[0.938,1.480],[1.358,1.226],[0.670,1.521],
+    [1.239,1.647],[0.704,1.445],[0.714,1.123],[0.686,1.416],[1.360,1.072],
+    [0.911,0.650],[1.218,0.955],[1.249,1.443],[1.609,1.427],[0.614,0.869],
+    [1.259,0.720],[1.021,0.640],[0.741,0.618],[1.341,0.759],[0.857,1.534]
+  ];
+  var K = locs.length;
+  var logWk = Math.log(1/K);
   return {
-    xmin: -14, xmax: 14,
+    xmin: -20, xmax: 20,
     logDensity: function(x) {
-      var terms = modes.map(function(m) {
-        return logWk + logMVNdiag2(x[0], x[1], m[0], m[1], sigma, sigma);
-      });
+      var terms = [];
+      for (var k = 0; k < K; k++)
+        terms.push(logWk + logMVNdiag2(x[0], x[1], locs[k][0], locs[k][1], scales[k][0], scales[k][1]));
       return logSumExpArr(terms);
     },
     gradLogDensity: function(x) {
-      var logTerms = modes.map(function(m) {
-        return logWk + logMVNdiag2(x[0], x[1], m[0], m[1], sigma, sigma);
-      });
+      var logTerms = [];
+      for (var k = 0; k < K; k++)
+        logTerms.push(logWk + logMVNdiag2(x[0], x[1], locs[k][0], locs[k][1], scales[k][0], scales[k][1]));
       var lse = logSumExpArr(logTerms);
       var gx = 0, gy = 0;
-      for (var k = 0; k < modes.length; k++) {
+      for (var k = 0; k < K; k++) {
         var r = Math.exp(logTerms[k] - lse);
-        gx += r * (-(x[0] - modes[k][0]) / (sigma*sigma));
-        gy += r * (-(x[1] - modes[k][1]) / (sigma*sigma));
+        gx += r * (-(x[0] - locs[k][0]) / (scales[k][0]*scales[k][0]));
+        gy += r * (-(x[1] - locs[k][1]) / (scales[k][1]*scales[k][1]));
       }
       return matrix([[gx],[gy]]);
     }
   };
 }());
 
-// ─── 4. Ring / Donut ─────────────────────────────────────────────────────────
+// ─── 3. Donut + Timbit ───────────────────────────────────────────────────────
+// Annular ring (75%) plus central Gaussian "timbit" (25%).
+// Shows that even gradient-based methods can't tunnel between topological components.
 
-MCMC.targetNames.push('ring');
-MCMC.targets['ring'] = (function() {
-  var R = 3.0, sigma2 = 0.25;
+MCMC.targetNames.push('donut-timbit');
+MCMC.targets['donut-timbit'] = (function() {
+  var R = 3.0, sigma2Ring = 0.30;
+  var sigmaTimbit = 0.8;
+  var logWRing = Math.log(0.75), logWTimbit = Math.log(0.25);
+
+  function logRing(x) {
+    var r = Math.sqrt(x[0]*x[0] + x[1]*x[1]);
+    var d = r - R;
+    return -d*d / (2*sigma2Ring);
+  }
+  function logTimbit(x) {
+    return logMVNdiag2(x[0], x[1], 0, 0, sigmaTimbit, sigmaTimbit);
+  }
   return {
-    xmin: -6, xmax: 6,
+    xmin: -7, xmax: 7,
     logDensity: function(x) {
-      var r = Math.sqrt(x[0]*x[0] + x[1]*x[1]);
-      var d = r - R;
-      return -d*d / sigma2;
+      return logSumExpArr([logWRing + logRing(x), logWTimbit + logTimbit(x)]);
     },
     gradLogDensity: function(x) {
+      var t1 = logWRing   + logRing(x);
+      var t2 = logWTimbit + logTimbit(x);
+      var lse = logSumExpArr([t1, t2]);
+      var r1 = Math.exp(t1 - lse), r2 = Math.exp(t2 - lse);
+      // Ring gradient
       var r = Math.sqrt(x[0]*x[0] + x[1]*x[1]);
-      if (r < 1e-10) return matrix([[0],[0]]);
-      var d = r - R;
-      var scale = -2*d / (sigma2 * r);
-      return matrix([[scale * x[0]], [scale * x[1]]]);
+      var gxRing = 0, gyRing = 0;
+      if (r > 1e-10) {
+        var d = r - R;
+        var sc = -d / (sigma2Ring * r);
+        gxRing = sc * x[0];
+        gyRing = sc * x[1];
+      }
+      // Timbit gradient
+      var gxTimbit = -x[0] / (sigmaTimbit*sigmaTimbit);
+      var gyTimbit = -x[1] / (sigmaTimbit*sigmaTimbit);
+      return matrix([[r1*gxRing + r2*gxTimbit],[r1*gyRing + r2*gyTimbit]]);
     }
   };
 }());
 
-// ─── 5. Rosenbrock ───────────────────────────────────────────────────────────
+// ─── 4. Rosenbrock ───────────────────────────────────────────────────────────
 
 MCMC.targetNames.push('rosenbrock');
 MCMC.targets['rosenbrock'] = {
@@ -170,7 +185,7 @@ MCMC.targets['rosenbrock'] = {
   }
 };
 
-// ─── 6. Bivariate Student-t (ν=2) ────────────────────────────────────────────
+// ─── 5. Bivariate Student-t (nu=2) ───────────────────────────────────────────
 
 MCMC.targetNames.push('student-t');
 MCMC.targets['student-t'] = {
@@ -188,13 +203,12 @@ MCMC.targets['student-t'] = {
   }
 };
 
-// ─── 7. Neal's Funnel ────────────────────────────────────────────────────────
+// ─── 6. Neal's Funnel ────────────────────────────────────────────────────────
 
 MCMC.targetNames.push('neals-funnel');
 MCMC.targets['neals-funnel'] = {
   xmin: -8, xmax: 8,
   logDensity: function(x) {
-    // x[0] = horizontal, x[1] = v (scale variable)
     var logp_v = -0.5*x[1]*x[1]/9;
     var ev = Math.exp(x[1]);
     var logp_x = -0.5*x[0]*x[0]/ev - 0.5*x[1];
@@ -207,39 +221,3 @@ MCMC.targets['neals-funnel'] = {
     return matrix([[gx],[gy]]);
   }
 };
-
-// ─── 8. Double Banana ────────────────────────────────────────────────────────
-
-MCMC.targetNames.push('double-banana');
-MCMC.targets['double-banana'] = (function() {
-  var b = 0.1, sigma = 0.5;
-  function logComp(x0, x1, flip) {
-    var y0 = flip * b * x0*x0;
-    var dy = x1 - y0;
-    return -0.5*x0*x0 - 0.5*dy*dy/(sigma*sigma);
-  }
-  return {
-    xmin: -5, xmax: 5,
-    logDensity: function(x) {
-      return logSumExpArr([
-        logComp(x[0], x[1],  1) + Math.log(0.5),
-        logComp(x[0], x[1], -1) + Math.log(0.5)
-      ]);
-    },
-    gradLogDensity: function(x) {
-      var t1 = logComp(x[0], x[1],  1) + Math.log(0.5);
-      var t2 = logComp(x[0], x[1], -1) + Math.log(0.5);
-      var lse = logSumExpArr([t1, t2]);
-      var r1 = Math.exp(t1 - lse), r2 = Math.exp(t2 - lse);
-      var gx = 0, gy = 0;
-      [1, -1].forEach(function(flip, i) {
-        var r = i === 0 ? r1 : r2;
-        var y0 = flip * b * x[0]*x[0];
-        var dy = x[1] - y0;
-        gx += r * (-x[0] - dy * flip * 2*b*x[0] / (sigma*sigma));
-        gy += r * (dy / (sigma*sigma));
-      });
-      return matrix([[gx],[gy]]);
-    }
-  };
-}());

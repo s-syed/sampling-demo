@@ -122,47 +122,44 @@ MCMC.targets['fab-gmm40'] = (function() {
   };
 }());
 
-// ─── 3. Donut + Timbit ───────────────────────────────────────────────────────
-// Annular ring (75%) plus central Gaussian "timbit" (25%).
-// Shows that even gradient-based methods can't tunnel between topological components.
+// ─── 3. Twin Donuts ──────────────────────────────────────────────────────────
+// Two annular rings well-separated, equal weights.
+// Great for showing that samplers get trapped in one ring.
 
-MCMC.targetNames.push('donut-timbit');
-MCMC.targets['donut-timbit'] = (function() {
-  var R = 2.5, sigma2Ring = 0.20;
-  var sigmaTimbit = 0.08;
-  var logWRing = Math.log(0.50), logWTimbit = Math.log(0.50);
+MCMC.targetNames.push('twin-donuts');
+MCMC.targets['twin-donuts'] = (function() {
+  var R = 1.5, sigma2 = 0.06;
+  var cx = [-3.0, 3.0]; // centres of the two rings
+  var logWk = Math.log(0.5);
 
-  function logRing(x) {
-    var r = Math.sqrt(x[0]*x[0] + x[1]*x[1]);
+  function logRing(x, cx0) {
+    var dx = x[0] - cx0;
+    var r = Math.sqrt(dx*dx + x[1]*x[1]);
     var d = r - R;
-    return -d*d / (2*sigma2Ring);
-  }
-  function logTimbit(x) {
-    return logMVNdiag2(x[0], x[1], 0, 0, sigmaTimbit, sigmaTimbit);
+    return -d*d / (2*sigma2);
   }
   return {
-    xmin: -5, xmax: 5,
+    xmin: -7, xmax: 7,
     logDensity: function(x) {
-      return logSumExpArr([logWRing + logRing(x), logWTimbit + logTimbit(x)]);
+      return logSumExpArr([logWk + logRing(x, cx[0]), logWk + logRing(x, cx[1])]);
     },
     gradLogDensity: function(x) {
-      var t1 = logWRing   + logRing(x);
-      var t2 = logWTimbit + logTimbit(x);
+      var t1 = logWk + logRing(x, cx[0]);
+      var t2 = logWk + logRing(x, cx[1]);
       var lse = logSumExpArr([t1, t2]);
       var r1 = Math.exp(t1 - lse), r2 = Math.exp(t2 - lse);
-      // Ring gradient
-      var r = Math.sqrt(x[0]*x[0] + x[1]*x[1]);
-      var gxRing = 0, gyRing = 0;
-      if (r > 1e-10) {
+      var gx = 0, gy = 0;
+      [cx[0], cx[1]].forEach(function(cx0, i) {
+        var w = i === 0 ? r1 : r2;
+        var dx = x[0] - cx0;
+        var r = Math.sqrt(dx*dx + x[1]*x[1]);
+        if (r < 1e-10) return;
         var d = r - R;
-        var sc = -d / (sigma2Ring * r);
-        gxRing = sc * x[0];
-        gyRing = sc * x[1];
-      }
-      // Timbit gradient
-      var gxTimbit = -x[0] / (sigmaTimbit*sigmaTimbit);
-      var gyTimbit = -x[1] / (sigmaTimbit*sigmaTimbit);
-      return matrix([[r1*gxRing + r2*gxTimbit],[r1*gyRing + r2*gyTimbit]]);
+        var sc = -d / (sigma2 * r);
+        gx += w * sc * dx;
+        gy += w * sc * x[1];
+      });
+      return matrix([[gx],[gy]]);
     }
   };
 }());

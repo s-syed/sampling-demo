@@ -37,10 +37,10 @@ function logMVNdiag2(x0, x1, mu0, mu1, s0, s1) {
 MCMC.targetNames.push('multimodal-unequal');
 MCMC.targets['multimodal-unequal'] = (function() {
   var comps = [
-    { mu: [-4.0,  0.0], s: [1.0, 1.0], w: 0.50 },
-    { mu: [ 4.0,  0.0], s: [0.7, 0.7], w: 0.30 },
-    { mu: [ 0.0,  3.5], s: [0.8, 0.8], w: 0.15 },
-    { mu: [ 0.0, -3.5], s: [0.5, 0.5], w: 0.05 },
+    { mu: [-4.0,  0.0], s: [0.5, 0.5], w: 0.50 },
+    { mu: [ 4.0,  0.0], s: [0.35, 0.35], w: 0.30 },
+    { mu: [ 0.0,  3.5], s: [0.4, 0.4], w: 0.15 },
+    { mu: [ 0.0, -3.5], s: [0.25, 0.25], w: 0.05 },
   ];
   var logW = comps.map(function(c) { return Math.log(c.w); });
   return {
@@ -129,8 +129,8 @@ MCMC.targets['fab-gmm40'] = (function() {
 MCMC.targetNames.push('donut-timbit');
 MCMC.targets['donut-timbit'] = (function() {
   var R = 3.0, sigma2Ring = 0.30;
-  var sigmaTimbit = 0.8;
-  var logWRing = Math.log(0.75), logWTimbit = Math.log(0.25);
+  var sigmaTimbit = 0.35;
+  var logWRing = Math.log(0.65), logWTimbit = Math.log(0.35);
 
   function logRing(x) {
     var r = Math.sqrt(x[0]*x[0] + x[1]*x[1]);

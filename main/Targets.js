@@ -1,16 +1,10 @@
 /**
  * Targets.js — Extended target distributions for sampling-demo
  *
- * Drop-in extension for chi-feng/mcmc-demo. Each target implements:
- *   logDensity(x, y)           — returns log unnormalized density (number)
- *   gradLogDensity(x, y)       — returns [∂/∂x, ∂/∂y] (required for MALA/HMC)
- *
- * To add a new target later:
- *   1. Define it below following the same pattern.
- *   2. Register it at the bottom with MCMC.targets['your-key'] = { ... };
- *   3. It will appear automatically in the dropdown.
- *
- * Author: added for s-syed/sampling-demo
+ * Each target must implement:
+ *   logDensity(x, y)        — log unnormalized density
+ *   gradLogDensity(x, y)    — [∂/∂x, ∂/∂y]  (required for MALA/HMC)
+ *   xmin, xmax, ymin, ymax  — viewing window bounds (required by Simulation.js)
  */
 
 (function () {
@@ -18,7 +12,6 @@
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
-  /** log of sum of exponentials (numerically stable) */
   function logSumExp(arr) {
     var max = -Infinity;
     for (var i = 0; i < arr.length; i++) if (arr[i] > max) max = arr[i];
@@ -28,35 +21,21 @@
     return max + Math.log(sum);
   }
 
-  /** Multivariate normal log-density (2D, diagonal covariance) */
   function logMVNdiag(x, y, mux, muy, sx, sy) {
     var dx = x - mux, dy = y - muy;
     return -0.5 * (dx * dx / (sx * sx) + dy * dy / (sy * sy))
            - Math.log(2 * Math.PI * sx * sy);
   }
 
-  /** Grad of logMVNdiag w.r.t. (x, y) */
   function gradLogMVNdiag(x, y, mux, muy, sx, sy) {
     return [-(x - mux) / (sx * sx), -(y - muy) / (sy * sy)];
   }
 
-  // ─── 1. Well-Separated Multimodal Gaussian (configurable weights) ────────────
-  //
-  //   A mixture of K Gaussians placed on a circle of radius `spread`.
-  //   Weights can be non-uniform to illustrate asymmetric mixing difficulty.
-  //   Default: 4 modes, equal weights, spread = 3.
-  //
-  //   Useful for: showing how RWM gets trapped, HMC can tunnel, PT effect.
+  // ─── 1. Multimodal Gaussian (equal weights, well-separated) ─────────────────
 
   MCMC.targets['multimodal-gaussian'] = (function () {
-    // --- Parameters (edit these to change the visualisation) ---
-    var K      = 4;          // number of modes
-    var spread = 3.0;        // radius of mode circle
-    var sigma  = 0.5;        // std of each component
-    // Non-uniform weights (will be normalised); try [4,1,1,1] to break symmetry
-    var rawW   = [1, 1, 1, 1];
-
-    // --- Derived quantities (do not edit) ---
+    var K = 4, spread = 3.0, sigma = 0.5;
+    var rawW = [1, 1, 1, 1];
     var modes = [], logW = [];
     var wSum = rawW.reduce(function (a, b) { return a + b; }, 0);
     for (var k = 0; k < K; k++) {
@@ -64,8 +43,8 @@
       modes.push({ x: spread * Math.cos(angle), y: spread * Math.sin(angle) });
       logW.push(Math.log(rawW[k] / wSum));
     }
-
     return {
+      xmin: -6, xmax: 6, ymin: -6, ymax: 6,
       logDensity: function (x, y) {
         var terms = [];
         for (var k = 0; k < K; k++)
@@ -73,7 +52,6 @@
         return logSumExp(terms);
       },
       gradLogDensity: function (x, y) {
-        // ∇ log p = Σ_k r_k ∇ log φ_k   where r_k = softmax responsibilities
         var logTerms = [];
         for (var k = 0; k < K; k++)
           logTerms.push(logW[k] + logMVNdiag(x, y, modes[k].x, modes[k].y, sigma, sigma));
@@ -89,10 +67,7 @@
     };
   }());
 
-  // ─── 2. Unequal-Weight Multimodal (asymmetric, well-separated) ──────────────
-  //
-  //   Same structure as above but with strongly unequal weights and larger
-  //   separation, making this a harder mixing problem.
+  // ─── 2. Multimodal Gaussian (unequal weights) ───────────────────────────────
 
   MCMC.targets['multimodal-unequal'] = (function () {
     var components = [
@@ -103,8 +78,8 @@
     ];
     var wSum = components.reduce(function (a, c) { return a + c.w; }, 0);
     var logW = components.map(function (c) { return Math.log(c.w / wSum); });
-
     return {
+      xmin: -6, xmax: 6, ymin: -6, ymax: 6,
       logDensity: function (x, y) {
         var terms = [];
         for (var k = 0; k < components.length; k++) {
@@ -132,14 +107,7 @@
     };
   }());
 
-  // ─── 3. GMM-32 — hard benchmark from Blessing et al. 2208.01893 ─────────────
-  //
-  //   A 2D mixture of 32 Gaussians with small variance arranged in a 4×8 grid,
-  //   all with equal weight. Used as a hard benchmark for annealing methods.
-  //   Modes are well-separated (spacing ~2.5 σ_between ≫ σ_within).
-  //
-  //   Reference: Blessing et al. "Beyond ELBOs: A Large-Scale Evaluation of
-  //   Variational Methods for Sampling" (2023) arXiv:2208.01893
+  // ─── 3. GMM-32 (Blessing et al. 2208.01893) ─────────────────────────────────
 
   MCMC.targets['gmm32'] = (function () {
     var modes = [];
@@ -153,8 +121,8 @@
       }
     }
     var logWk = Math.log(1 / modes.length);
-
     return {
+      xmin: -14, xmax: 14, ymin: -6, ymax: 6,
       logDensity: function (x, y) {
         var terms = [];
         for (var k = 0; k < modes.length; k++)
@@ -178,18 +146,11 @@
   }());
 
   // ─── 4. Ring / Donut ────────────────────────────────────────────────────────
-  //
-  //   p(x,y) ∝ exp( -(r - R)² / (2σ²) )  where r = sqrt(x²+y²)
-  //
-  //   A challenging target for gradient-based methods: the gradient points
-  //   radially, so MALA/HMC must orbit the ring; illustrates the value of
-  //   long trajectories.
 
   MCMC.targets['ring'] = (function () {
-    var R = 3.0;   // ring radius
-    var sigma = 0.5; // ring width
-
+    var R = 3.0, sigma = 0.5;
     return {
+      xmin: -6, xmax: 6, ymin: -6, ymax: 6,
       logDensity: function (x, y) {
         var r = Math.sqrt(x * x + y * y);
         var d = r - R;
@@ -205,23 +166,13 @@
     };
   }());
 
-  // ─── 5. Banana / Neal's Funnel (2D twisted Gaussian) ─────────────────────────
-  //
-  //   The classic "banana-shaped" distribution:
-  //     x₁ ~ N(0,1),   x₂ | x₁ ~ N(bx₁², 1)
-  //   Controlled by curvature b (default 0.03 matches Neal 2003).
-  //
-  //   Different from the "banana" already in the original repo (which uses the
-  //   Rosenbrock parameterisation). This version makes the vertical spread more
-  //   pronounced.
+  // ─── 5. Twisted Banana ──────────────────────────────────────────────────────
 
   MCMC.targets['funnel'] = (function () {
-    var b = 0.05;   // curvature; try 0.1 for a sharper bend
-    var sigma1 = 2.0, sigma2 = 1.0;
-
+    var b = 0.05, sigma1 = 2.0, sigma2 = 1.0;
     return {
+      xmin: -6, xmax: 6, ymin: -4, ymax: 4,
       logDensity: function (x, y) {
-        // x plays the role of x₁ (the "wide" axis)
         var shift = b * x * x;
         return -0.5 * x * x / (sigma1 * sigma1)
                -0.5 * (y - shift) * (y - shift) / (sigma2 * sigma2);
@@ -229,24 +180,19 @@
       gradLogDensity: function (x, y) {
         var shift = b * x * x;
         var dy = (y - shift) / (sigma2 * sigma2);
-        var dx = x / (sigma1 * sigma1) + dy * 2 * b * x;  // chain rule on shift
-        return [-dx, -(-dy)]; // note: returning [∂logp/∂x, ∂logp/∂y]
+        var gx = -(x / (sigma1 * sigma1) + dy * 2 * b * x);
+        var gy = dy;
+        return [gx, gy];
       }
     };
   }());
 
   // ─── 6. Rosenbrock ──────────────────────────────────────────────────────────
-  //
-  //   p(x,y) ∝ exp( -( (1-x)² + 100(y-x²)² ) / scale )
-  //
-  //   The classic Rosenbrock "banana valley". The probability mass follows
-  //   a narrow curved valley, making this a canonical hard target for MCMC.
-  //   `scale` controls how peaked the distribution is.
 
   MCMC.targets['rosenbrock'] = (function () {
-    var scale = 20.0;  // lower = narrower valley = harder
-
+    var scale = 20.0;
     return {
+      xmin: -3, xmax: 3, ymin: -2, ymax: 8,
       logDensity: function (x, y) {
         var a = 1 - x;
         var b = y - x * x;
@@ -254,13 +200,6 @@
       },
       gradLogDensity: function (x, y) {
         var b = y - x * x;
-        var dlogp_dx = (2 * (1 - x) + 100 * 2 * b * 2 * x) / scale; // -(d/dx of numer)/scale with sign flip
-        var dlogp_dy = -(200 * b * (-1)) / scale;                     // careful signs
-        // Let's redo carefully:
-        // logp = -(  (1-x)^2 + 100*(y-x^2)^2  ) / scale
-        // ∂logp/∂x = -[ 2(1-x)(-1) + 100*2(y-x^2)(-2x) ] / scale
-        //           = [ 2(1-x) + 400x(y-x^2) ] / scale
-        // ∂logp/∂y = -[ 100*2(y-x^2) ] / scale = -200(y-x^2)/scale
         var gx = (2 * (1 - x) + 400 * x * b) / scale;
         var gy = -200 * b / scale;
         return [gx, gy];
@@ -268,17 +207,12 @@
     };
   }());
 
-  // ─── 7. Heavy-Tailed (Bivariate Student-t) ──────────────────────────────────
-  //
-  //   p(x,y) ∝ (1 + (x²+y²)/ν)^{-(ν+2)/2}
-  //
-  //   With ν small (default 2), the tails are heavy. Good for illustrating
-  //   that RWM/HMC tuned for Gaussian assumptions can misbehave.
+  // ─── 7. Bivariate Student-t ─────────────────────────────────────────────────
 
   MCMC.targets['student-t'] = (function () {
-    var nu = 2.0;  // degrees of freedom; lower = heavier tails
-
+    var nu = 2.0;
     return {
+      xmin: -8, xmax: 8, ymin: -8, ymax: 8,
       logDensity: function (x, y) {
         var r2 = x * x + y * y;
         return -0.5 * (nu + 2) * Math.log(1 + r2 / nu);
@@ -291,55 +225,44 @@
     };
   }());
 
-  // ─── 8. Neal's Funnel (true version — hierarchical) ─────────────────────────
-  //
-  //   v ~ N(0, 9),   x | v ~ N(0, exp(v))
-  //
-  //   The canonical funnel from Neal (2003). Here v = y (vertical axis),
-  //   x = x (horizontal). Extremely challenging because the geometry changes
-  //   drastically: wide at the top, narrow at the bottom.
+  // ─── 8. Neal's Funnel ───────────────────────────────────────────────────────
 
   MCMC.targets['neals-funnel'] = (function () {
     return {
+      xmin: -8, xmax: 8, ymin: -6, ymax: 6,
       logDensity: function (x, y) {
-        // v = y, x = x
         var logp_v = -0.5 * y * y / 9;
-        var var_x  = Math.exp(y);           // exp(v)
-        var logp_x = -0.5 * x * x / var_x - 0.5 * y; // log N(x; 0, exp(v)) = -x²/(2 exp(v)) - v/2
+        var var_x  = Math.exp(y);
+        var logp_x = -0.5 * x * x / var_x - 0.5 * y;
         return logp_v + logp_x;
       },
       gradLogDensity: function (x, y) {
         var evy = Math.exp(y);
         var gx = -x / evy;
-        // ∂/∂y: -y/9 + x²/(2 exp(y)) - 1/2
         var gy = -y / 9 + 0.5 * x * x / evy - 0.5;
         return [gx, gy];
       }
     };
   }());
 
-  // ─── 9. Double Banana (figure-eight) ────────────────────────────────────────
-  //
-  //   Two back-to-back banana-shaped modes, useful for showing
-  //   multi-modal + curved geometry simultaneously.
+  // ─── 9. Double Banana ───────────────────────────────────────────────────────
 
   MCMC.targets['double-banana'] = (function () {
     var b = 0.1, sigma = 0.5;
-
     function logComp(x, y, flip) {
-      var y0  = flip * b * x * x;
-      var dy  = y - y0;
+      var y0 = flip * b * x * x;
+      var dy = y - y0;
       return -0.5 * x * x - 0.5 * dy * dy / (sigma * sigma);
     }
     function gradLogComp(x, y, flip) {
-      var y0  = flip * b * x * x;
-      var dy  = y - y0;
-      var gx  = -x - dy * flip * 2 * b * x / (sigma * sigma);
-      var gy  = dy / (sigma * sigma);
+      var y0 = flip * b * x * x;
+      var dy = y - y0;
+      var gx = -x - dy * flip * 2 * b * x / (sigma * sigma);
+      var gy = dy / (sigma * sigma);
       return [gx, gy];
     }
-
     return {
+      xmin: -5, xmax: 5, ymin: -4, ymax: 4,
       logDensity: function (x, y) {
         return logSumExp([logComp(x, y, 1) + Math.log(0.5),
                           logComp(x, y, -1) + Math.log(0.5)]);
